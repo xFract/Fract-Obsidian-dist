@@ -44,7 +44,6 @@ if typeof(clonefunction) == "function" then
 end
 
 local DEFAULT_SETTINGS = {
-    Theme = "Default",
     MenuKeybind = "RightShift",
     AutoMinimize = false,
     AutoExecute = false,
@@ -86,7 +85,6 @@ InterfaceManager.__index = InterfaceManager
 InterfaceManager.Folder = "ObsidianLibSettings"
 InterfaceManager.Library = nil
 InterfaceManager.Window = nil
-InterfaceManager.ThemeManager = nil
 InterfaceManager.Settings = deepCopy(DEFAULT_SETTINGS)
 InterfaceManager.AutoExecuteSource = nil
 InterfaceManager.AutoExecuteBound = false
@@ -109,10 +107,6 @@ end
 
 function InterfaceManager:SetWindow(window)
     self.Window = window
-end
-
-function InterfaceManager:SetThemeManager(themeManager)
-    self.ThemeManager = themeManager
 end
 
 function InterfaceManager:SetAutoExecuteSource(source)
@@ -225,72 +219,6 @@ function InterfaceManager:Notify(title, description, duration)
             self.Library:Notify(string.format("%s: %s", tostring(title), tostring(description)))
         end)
     end
-end
-
-function InterfaceManager:GetThemeManager()
-    return self.ThemeManager or rawget(getgenv(), "ObsidianThemeManager")
-end
-
-function InterfaceManager:GetThemeNames()
-    local themeManager = self:GetThemeManager()
-    if not themeManager then
-        return { DEFAULT_SETTINGS.Theme }
-    end
-
-    local names = {}
-    local seen = {}
-
-    if typeof(themeManager.BuiltInThemes) == "table" then
-        local ordered = {}
-        for name, data in pairs(themeManager.BuiltInThemes) do
-            ordered[#ordered + 1] = { Name = name, Order = data[1] or math.huge }
-        end
-
-        table.sort(ordered, function(left, right)
-            if left.Order == right.Order then
-                return left.Name < right.Name
-            end
-
-            return left.Order < right.Order
-        end)
-
-        for _, entry in ipairs(ordered) do
-            seen[entry.Name] = true
-            names[#names + 1] = entry.Name
-        end
-    end
-
-    if type(themeManager.ReloadCustomThemes) == "function" then
-        for _, name in ipairs(themeManager:ReloadCustomThemes()) do
-            if not seen[name] then
-                seen[name] = true
-                names[#names + 1] = name
-            end
-        end
-    end
-
-    if #names == 0 then
-        names[1] = DEFAULT_SETTINGS.Theme
-    end
-
-    return names
-end
-
-function InterfaceManager:ApplyTheme(themeName)
-    local themeManager = self:GetThemeManager()
-    if not themeManager or type(themeManager.ApplyTheme) ~= "function" then
-        return false
-    end
-
-    local success = pcall(function()
-        themeManager:ApplyTheme(themeName)
-    end)
-
-    if success then
-        self.Settings.Theme = themeName
-    end
-
-    return success
 end
 
 function InterfaceManager:SetPerformanceMode(enabled)
@@ -646,7 +574,6 @@ function InterfaceManager:MinimizeWindow()
 end
 
 function InterfaceManager:ApplyLoadedSettings()
-    self:ApplyTheme(self.Settings.Theme)
     self:BindTeleportAutoExecute()
     self:BindAutoRejoin()
     self:BindStaffDetector()
@@ -696,14 +623,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         utilitySection = tab:AddRightGroupbox("Utility", "wrench")
         serverSection = tab:AddRightGroupbox("Server & Safety", "shield")
     end
-
-    local themeNames = self:GetThemeNames()
-    appearanceSection:AddDropdown("InterfaceManager_Theme", {
-        Text = "Theme",
-        Values = themeNames,
-        Default = table.find(themeNames, self.Settings.Theme) or 1,
-        AllowNull = false,
-    })
 
     appearanceSection:AddLabel("Menu bind")
         :AddKeyPicker("InterfaceManager_MenuKeybind", {
@@ -766,15 +685,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         self:ServerHop()
     end)
 
-    self.Library.Options.InterfaceManager_Theme:OnChanged(function(value)
-        if not self:ApplyTheme(value) then
-            self:Notify("Interface Manager", "ThemeManager is not available for theme switching.")
-            return
-        end
-
-        self:SaveSettings()
-    end)
-
     self.Library.Options.InterfaceManager_MenuKeybind:OnChanged(function()
         self:SetMenuKeybind(self.Library.Options.InterfaceManager_MenuKeybind.Value)
     end)
@@ -825,15 +735,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
     end)
 
     self.Library.ToggleKeybind = self.Library.Options.InterfaceManager_MenuKeybind
-end
-
-function InterfaceManager:BuildAutoLoadThemeList()
-    local dropdown = self.Library and self.Library.Options and self.Library.Options.InterfaceManager_Theme
-    if not dropdown then
-        return
-    end
-
-    dropdown:SetValues(self:GetThemeNames())
 end
 
 InterfaceManager:BuildFolderTree()
