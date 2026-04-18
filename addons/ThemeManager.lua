@@ -165,6 +165,26 @@ do
         self:BuildFolderTree()
     end
 
+    function ThemeManager:ResolveFont(FontFace)
+        if typeof(FontFace) == "EnumItem" then
+            return FontFace
+        end
+
+        if typeof(FontFace) ~= "string" then
+            return Enum.Font.Code
+        end
+
+        return Enum.Font[FontFace] or Enum.Font.Code
+    end
+
+    function ThemeManager:ApplyFont(FontFace)
+        self.Library:SetFont(self:ResolveFont(FontFace))
+
+        if self.Library.Options.FontFace and self.Library.Options.FontFace.Value ~= FontFace then
+            self.Library.Options.FontFace:SetValue(FontFace)
+        end
+    end
+
     --// Apply, Update theme \\--
     function ThemeManager:ApplyTheme(theme)
         local customThemeData = self:GetCustomTheme(theme)
@@ -179,11 +199,7 @@ do
             if idx == "VideoLink" then
                 continue
             elseif idx == "FontFace" then
-                self.Library:SetFont(Enum.Font[val])
-
-                if self.Library.Options[idx] then
-                    self.Library.Options[idx]:SetValue(val)
-                end
+                self:ApplyFont(val)
             else
                 self.Library.Scheme[idx] = Color3.fromHex(val)
 
@@ -277,7 +293,7 @@ do
 
         elseif typeof(theme["FontFace"]) == "string" then
             FinalTheme["FontFace"] = theme["FontFace"]
-            LibraryScheme["Font"] = Font.fromEnum(Enum.Font[theme["FontFace"]])
+            LibraryScheme["Font"] = Font.fromEnum(self:ResolveFont(theme["FontFace"]))
 
         else
             FinalTheme["FontFace"] = "Code"
@@ -470,6 +486,7 @@ do
             self.Library.Options.ThemeManager_CustomThemeList:SetValue(nil)
         end)
 
+        self:ApplyFont(self.Library.Options.FontFace.Value)
         self:LoadDefault()
         self.AppliedToTab = true
 
@@ -483,7 +500,7 @@ do
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
         self.Library.Options.FontFace:OnChanged(function(Value)
-            self.Library:SetFont(Enum.Font[Value])
+            self.Library:SetFont(self:ResolveFont(Value))
             self.Library:UpdateColorsUsingRegistry()
         end)
     end
