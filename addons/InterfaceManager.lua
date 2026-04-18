@@ -44,7 +44,6 @@ if typeof(clonefunction) == "function" then
 end
 
 local DEFAULT_SETTINGS = {
-    MenuKeybind = "RightShift",
     AutoMinimize = false,
     AutoExecute = false,
     AutoExecuteGist = "https://gist.githubusercontent.com/xFract/56ca5d02d698ea6536e4d975c4cf3d1e/raw/script.lua",
@@ -541,16 +540,6 @@ function InterfaceManager:BindTeleportAutoExecute()
     end)
 end
 
-function InterfaceManager:SetMenuKeybind(key)
-    self.Settings.MenuKeybind = key
-
-    if self.Library and self.Library.Options and self.Library.Options.InterfaceManager_MenuKeybind then
-        self.Library.ToggleKeybind = self.Library.Options.InterfaceManager_MenuKeybind
-    end
-
-    self:SaveSettings()
-end
-
 function InterfaceManager:GetWindowVisible()
     local mainFrame = self.Window and self.Window.MainFrame
     if mainFrame and mainFrame:IsA("GuiObject") then
@@ -590,10 +579,6 @@ function InterfaceManager:ApplyLoadedSettings()
         self:SetFPSCap(self.Settings.FPSCap or DEFAULT_SETTINGS.FPSCap)
     end
 
-    if self.Library and self.Library.Options and self.Library.Options.InterfaceManager_MenuKeybind then
-        self.Library.ToggleKeybind = self.Library.Options.InterfaceManager_MenuKeybind
-    end
-
     if self.Settings.AutoMinimize then
         task.defer(function()
             self:MinimizeWindow()
@@ -623,13 +608,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         utilitySection = tab:AddRightGroupbox("Utility", "wrench")
         serverSection = tab:AddRightGroupbox("Server & Safety", "shield")
     end
-
-    appearanceSection:AddLabel("Menu bind")
-        :AddKeyPicker("InterfaceManager_MenuKeybind", {
-            Default = self.Settings.MenuKeybind,
-            NoUI = true,
-            Text = "Menu keybind",
-        })
 
     appearanceSection:AddToggle("InterfaceManager_AutoMinimize", {
         Text = "Auto minimize",
@@ -685,10 +663,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         self:ServerHop()
     end)
 
-    self.Library.Options.InterfaceManager_MenuKeybind:OnChanged(function()
-        self:SetMenuKeybind(self.Library.Options.InterfaceManager_MenuKeybind.Value)
-    end)
-
     self.Library.Toggles.InterfaceManager_AutoMinimize:OnChanged(function()
         self.Settings.AutoMinimize = self.Library.Toggles.InterfaceManager_AutoMinimize.Value
         self:SaveSettings()
@@ -733,8 +707,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         self.Settings.WebhookURL = self.Library.Options.InterfaceManager_WebhookURL.Value
         self:SaveSettings()
     end)
-
-    self.Library.ToggleKeybind = self.Library.Options.InterfaceManager_MenuKeybind
 end
 
 InterfaceManager:BuildFolderTree()
