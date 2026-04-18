@@ -255,11 +255,12 @@ do
             theme = self.DefaultTheme
         end
 
-        if isDefault then
+        if isDefault and self.Library.Options.ThemeManager_ThemeList then
             self.Library.Options.ThemeManager_ThemeList:SetValue(theme)
-        else
-            self:ApplyTheme(theme)
+            return
         end
+
+        self:ApplyTheme(theme)
     end
 
     function ThemeManager:SaveDefault(theme)

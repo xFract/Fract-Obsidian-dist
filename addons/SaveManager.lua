@@ -405,10 +405,17 @@ local SaveManager = {} do
     end
 
     --// GUI \\--
-    function SaveManager:BuildConfigSection(tab)
+    function SaveManager:BuildConfigSection(tab, side)
         assert(self.Library, "Must set SaveManager.Library")
 
-        local section = tab:AddRightGroupbox("Configuration", "folder-cog")
+        side = (typeof(side) == "string" and side:lower()) or "right"
+
+        local section
+        if side == "left" then
+            section = tab:AddLeftGroupbox("Configuration", "folder-cog")
+        else
+            section = tab:AddRightGroupbox("Configuration", "folder-cog")
+        end
 
         section:AddInput("SaveManager_ConfigName",    { Text = "Config name" })
         section:AddButton("Create config", function()
