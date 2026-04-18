@@ -12,7 +12,6 @@ local TeleportService: TeleportService = cloneref(game:GetService("TeleportServi
 local Lighting: Lighting = cloneref(game:GetService("Lighting"))
 local GuiService: GuiService = cloneref(game:GetService("GuiService"))
 local MarketplaceService: MarketplaceService = cloneref(game:GetService("MarketplaceService"))
-local UserInputService: UserInputService = cloneref(game:GetService("UserInputService"))
 local CoreGui = cloneref(game:GetService("CoreGui"))
 
 local isfolder, isfile, listfiles = isfolder, isfile, listfiles
@@ -59,22 +58,6 @@ local DEFAULT_SETTINGS = {
     WebhookURL = "",
 }
 
-local MINIMIZE_BUTTON_DEFAULTS = {
-    Enabled = true,
-    Draggable = true,
-    Position = UDim2.new(0.5, 0, 0, 28),
-    Icon = "rbxassetid://112145022002617",
-    Size = UDim2.fromOffset(44, 44),
-    IconSize = UDim2.fromOffset(42, 42),
-    CornerRadius = UDim.new(1, 0),
-    StrokeThickness = 1,
-    BackgroundColor3 = Color3.fromRGB(15, 15, 15),
-    BackgroundTransparency = 0.2,
-    BorderColor3 = Color3.fromRGB(255, 255, 255),
-    BorderTransparency = 0.15,
-    IconColor3 = Color3.fromRGB(255, 255, 255),
-}
-
 local function deepCopy(source)
     local out = {}
 
@@ -114,9 +97,6 @@ InterfaceManager.IsRejoining = false
 InterfaceManager.IsHopping = false
 InterfaceManager.OriginalLighting = nil
 InterfaceManager.PerformanceRestore = {}
-InterfaceManager.MinimizeButtonConfig = nil
-InterfaceManager.MinimizeButton = nil
-InterfaceManager.MinimizeButtonConnections = nil
 
 function InterfaceManager:SetFolder(folder)
     self.Folder = folder
@@ -133,11 +113,6 @@ end
 
 function InterfaceManager:SetThemeManager(themeManager)
     self.ThemeManager = themeManager
-end
-
-function InterfaceManager:SetMinimizeButtonConfig(config)
-    self.MinimizeButtonConfig = config
-    self:ApplyMinimizeButton()
 end
 
 function InterfaceManager:SetAutoExecuteSource(source)
@@ -648,28 +623,6 @@ function InterfaceManager:SetMenuKeybind(key)
     self:SaveSettings()
 end
 
-function InterfaceManager:GetMinimizeButtonParent()
-    if self.Library and self.Library.ScreenGui then
-        return self.Library.ScreenGui
-    end
-
-    return nil
-end
-
-function InterfaceManager:GetMinimizeButtonConfig()
-    local configured = self.MinimizeButtonConfig or {}
-    local resolved = {}
-
-    for key, value in pairs(MINIMIZE_BUTTON_DEFAULTS) do
-        resolved[key] = configured[key]
-        if resolved[key] == nil then
-            resolved[key] = value
-        end
-    end
-
-    return resolved
-end
-
 function InterfaceManager:GetWindowVisible()
     local mainFrame = self.Window and self.Window.MainFrame
     if mainFrame and mainFrame:IsA("GuiObject") then
@@ -683,185 +636,12 @@ function InterfaceManager:GetWindowVisible()
     return true
 end
 
-function InterfaceManager:DisconnectMinimizeButton()
-    if not self.MinimizeButtonConnections then
-        return
-    end
-
-    for _, connection in ipairs(self.MinimizeButtonConnections) do
-        if connection and connection.Disconnect then
-            connection:Disconnect()
-        end
-    end
-
-    self.MinimizeButtonConnections = nil
-end
-
-function InterfaceManager:DestroyMinimizeButton()
-    self:DisconnectMinimizeButton()
-
-    if self.MinimizeButton then
-        self.MinimizeButton:Destroy()
-        self.MinimizeButton = nil
-    end
-end
-
-function InterfaceManager:SetMinimizeButtonVisible(visible)
-    if self.MinimizeButton then
-        self.MinimizeButton.Visible = visible == true
-    end
-end
-
-function InterfaceManager:RefreshMinimizeButtonVisibility()
-    self:SetMinimizeButtonVisible(not self:GetWindowVisible())
-end
-
-function InterfaceManager:CreateMinimizeButton()
-    self:DestroyMinimizeButton()
-
-    if not self.Window or type(self.Window.Toggle) ~= "function" then
-        return false
-    end
-
-    local parent = self:GetMinimizeButtonParent()
-    if not parent then
-        return false
-    end
-
-    local config = self:GetMinimizeButtonConfig()
-    if config.Enabled == false then
-        return false
-    end
-
-    local holder = Instance.new("Frame")
-    holder.Name = "ObsidianInterfaceMinimizeButton"
-    holder.AnchorPoint = Vector2.new(0.5, 0.5)
-    holder.Position = config.Position
-    holder.Size = config.Size
-    holder.BackgroundTransparency = 1
-    holder.BorderSizePixel = 0
-    holder.ZIndex = 1000
-    holder.Parent = parent
-
-    local button = Instance.new("ImageButton")
-    button.Name = "Button"
-    button.Size = UDim2.fromScale(1, 1)
-    button.BackgroundColor3 = config.BackgroundColor3
-    button.BackgroundTransparency = config.BackgroundTransparency
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = true
-    button.Image = ""
-    button.ZIndex = 1001
-    button.Parent = holder
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = config.CornerRadius
-    corner.Parent = button
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = config.StrokeThickness
-    stroke.Color = config.BorderColor3
-    stroke.Transparency = config.BorderTransparency
-    stroke.Parent = button
-
-    local icon = Instance.new("ImageLabel")
-    icon.Name = "Icon"
-    icon.AnchorPoint = Vector2.new(0.5, 0.5)
-    icon.Position = UDim2.fromScale(0.5, 0.5)
-    icon.Size = config.IconSize
-    icon.BackgroundTransparency = 1
-    icon.ScaleType = Enum.ScaleType.Fit
-    icon.ImageColor3 = config.IconColor3
-    icon.ZIndex = 1002
-    icon.Parent = button
-
-    if typeof(config.Icon) == "string" then
-        icon.Image = config.Icon
-    end
-
-    local connections = {}
-    local dragging = false
-    local dragStart
-    local startPosition
-
-    connections[#connections + 1] = button.MouseButton1Click:Connect(function()
-        self.Window:Toggle()
-        task.defer(function()
-            self:RefreshMinimizeButtonVisibility()
-        end)
-    end)
-
-    if config.Draggable ~= false then
-        connections[#connections + 1] = button.InputBegan:Connect(function(input)
-            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-                return
-            end
-
-            dragging = true
-            dragStart = input.Position
-            startPosition = holder.Position
-
-            local endedConnection
-            endedConnection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if endedConnection then
-                        endedConnection:Disconnect()
-                    end
-                end
-            end)
-
-            connections[#connections + 1] = endedConnection
-        end)
-
-        connections[#connections + 1] = UserInputService.InputChanged:Connect(function(input)
-            if not dragging then
-                return
-            end
-
-            if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-                return
-            end
-
-            local delta = input.Position - dragStart
-            holder.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end)
-    end
-
-    local mainFrame = self.Window.MainFrame
-    if mainFrame and mainFrame.GetPropertyChangedSignal then
-        connections[#connections + 1] = mainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
-            self:RefreshMinimizeButtonVisibility()
-        end)
-    end
-
-    self.MinimizeButton = holder
-    self.MinimizeButtonConnections = connections
-    self:RefreshMinimizeButtonVisibility()
-
-    return true
-end
-
-function InterfaceManager:ApplyMinimizeButton()
-    return self:CreateMinimizeButton()
-end
-
 function InterfaceManager:MinimizeWindow()
     if not self.Window or type(self.Window.Toggle) ~= "function" or not self:GetWindowVisible() then
         return false
     end
 
-    self:ApplyMinimizeButton()
     self.Window:Toggle()
-    task.defer(function()
-        self:RefreshMinimizeButtonVisibility()
-    end)
-
     return true
 end
 
@@ -886,8 +666,6 @@ function InterfaceManager:ApplyLoadedSettings()
     if self.Library and self.Library.Options and self.Library.Options.InterfaceManager_MenuKeybind then
         self.Library.ToggleKeybind = self.Library.Options.InterfaceManager_MenuKeybind
     end
-
-    self:ApplyMinimizeButton()
 
     if self.Settings.AutoMinimize then
         task.defer(function()
@@ -939,25 +717,9 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         Default = self.Settings.AutoMinimize,
     })
 
-    appearanceSection:AddButton("Apply minimize button", function()
-        if not self:ApplyMinimizeButton() then
-            self:Notify("Interface Manager", "Failed to create minimize button.")
-            return
-        end
-
-        self:Notify("Interface Manager", "Minimize button applied.")
-    end)
-
     utilitySection:AddToggle("InterfaceManager_AutoExecute", {
         Text = "Auto execute",
         Default = self.Settings.AutoExecute,
-    })
-
-    utilitySection:AddInput("InterfaceManager_AutoExecuteGist", {
-        Text = "Auto execute URL",
-        Default = self.Settings.AutoExecuteGist,
-        Placeholder = "https://gist.githubusercontent.com/.../script.lua",
-        Finished = true,
     })
 
     utilitySection:AddToggle("InterfaceManager_AntiAFK", {
@@ -1025,10 +787,6 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
     self.Library.Toggles.InterfaceManager_AutoExecute:OnChanged(function()
         self.Settings.AutoExecute = self.Library.Toggles.InterfaceManager_AutoExecute.Value
         self:SaveSettings()
-    end)
-
-    self.Library.Options.InterfaceManager_AutoExecuteGist:OnChanged(function()
-        self:SetAutoExecuteUrl(self.Library.Options.InterfaceManager_AutoExecuteGist.Value)
     end)
 
     self.Library.Toggles.InterfaceManager_AntiAFK:OnChanged(function()
