@@ -43,6 +43,77 @@ local SaveManager = {} do
     SaveManager.SubFolder = ""
     SaveManager.Ignore = {}
     SaveManager.Library = nil
+    SaveManager.DropdownRestoreRetryCount = 20
+    SaveManager.DropdownRestoreRetryDelay = 0.1
+
+    local function normalizeMultiDropdownValue(value)
+        local normalized = {}
+
+        if typeof(value) ~= "table" then
+            return normalized
+        end
+
+        for key, enabled in pairs(value) do
+            if typeof(enabled) == "boolean" then
+                if enabled then
+                    normalized[key] = true
+                end
+            else
+                normalized[enabled] = true
+            end
+        end
+
+        return normalized
+    end
+
+    local function dropdownValuesMatch(currentValue, expectedValue, isMulti)
+        if isMulti then
+            local current = normalizeMultiDropdownValue(currentValue)
+            local expected = normalizeMultiDropdownValue(expectedValue)
+
+            for key in pairs(expected) do
+                if current[key] ~= true then
+                    return false
+                end
+            end
+
+            for key in pairs(current) do
+                if expected[key] ~= true then
+                    return false
+                end
+            end
+
+            return true
+        end
+
+        return currentValue == expectedValue
+    end
+
+    local function canAttemptDropdownRestore(object)
+        return object ~= nil and typeof(object.SetValue) == "function"
+    end
+
+    local function restoreDropdownValue(idx, data, attemptsRemaining)
+        local object = SaveManager.Library.Options[idx]
+        if not canAttemptDropdownRestore(object) then
+            return
+        end
+
+        object:SetValue(data.value)
+
+        if dropdownValuesMatch(object.Value, data.value, data.multi) then
+            return
+        end
+
+        if attemptsRemaining <= 0 then
+            return
+        end
+
+        task.delay(SaveManager.DropdownRestoreRetryDelay, function()
+            restoreDropdownValue(idx, data, attemptsRemaining - 1)
+        end)
+    end
+
     SaveManager.Parser = {
         Toggle = {
             Save = function(idx, object)
@@ -72,8 +143,8 @@ local SaveManager = {} do
             end,
             Load = function(idx, data)
                 local object = SaveManager.Library.Options[idx]
-                if object and object.Value ~= data.value then
-                    object:SetValue(data.value)
+                if object and not dropdownValuesMatch(object.Value, data.value, data.multi) then
+                    restoreDropdownValue(idx, data, SaveManager.DropdownRestoreRetryCount)
                 end
             end,
         },
