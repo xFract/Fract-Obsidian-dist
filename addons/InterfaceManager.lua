@@ -78,6 +78,9 @@ local function getQueueOnTeleport()
     return (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 end
 
+local SERVER_HOP_MAX_PAGES = 5
+local LOW_PLAYER_RATIO = 0.3
+
 local InterfaceManager = {}
 InterfaceManager.__index = InterfaceManager
 
@@ -360,6 +363,141 @@ function InterfaceManager:SendWebhook(title, description)
     end)
 end
 
+function InterfaceManager:GetJson(url)
+    local httpRequest = getHttpRequest()
+
+    if httpRequest then
+        local requestSuccess, requestResult = pcall(function()
+            return httpRequest({
+                Url = url,
+                Method = "GET",
+                Headers = {
+                    Accept = "application/json",
+                },
+            })
+        end)
+
+        if requestSuccess and typeof(requestResult) == "table" then
+            local statusCode = tonumber(
+                requestResult.StatusCode or requestResult.status_code or requestResult.Status
+            )
+            local body = requestResult.Body or requestResult.body
+
+            if body and (not statusCode or (statusCode >= 200 and statusCode < 300)) then
+                local decodeSuccess, decoded = pcall(function()
+                    return HttpService:JSONDecode(body)
+                end)
+
+                if decodeSuccess then
+                    return true, decoded
+                end
+            end
+        end
+    end
+
+    local getSuccess, getResult = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    if getSuccess then
+        return true, getResult
+    end
+
+    return false, nil
+end
+
+function InterfaceManager:GetServerListUrl(cursor)
+    local url = string.format(
+        "https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true",
+        game.PlaceId
+    )
+
+    if typeof(cursor) == "string" and cursor ~= "" then
+        url = url .. "&cursor=" .. HttpService:UrlEncode(cursor)
+    end
+
+    return url
+end
+
+function InterfaceManager:IsHopCandidate(server)
+    if typeof(server) ~= "table" or typeof(server.id) ~= "string" or server.id == game.JobId then
+        return false
+    end
+
+    local playing = tonumber(server.playing)
+    local maxPlayers = tonumber(server.maxPlayers)
+
+    return playing ~= nil and maxPlayers ~= nil and maxPlayers > 0 and playing < maxPlayers
+end
+
+function InterfaceManager:GetLowPlayerLimit(maxPlayers)
+    return math.max(1, math.floor(maxPlayers * LOW_PLAYER_RATIO))
+end
+
+function InterfaceManager:TeleportToHopTarget(targetServer)
+    if targetServer then
+        local success = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer.id, Players.LocalPlayer)
+        end)
+
+        if success then
+            return true, nil
+        end
+
+        self:Notify("Server hop", "Target server became unavailable; trying another public server.", 5)
+        return pcall(function()
+            TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
+        end)
+    end
+
+    return pcall(function()
+        TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
+    end)
+end
+
+function InterfaceManager:FindServerHopTarget(lowPlayerOnly)
+    local cursor = nil
+    local bestServer = nil
+    local bestPlaying = math.huge
+
+    for _ = 1, SERVER_HOP_MAX_PAGES do
+        local success, response = self:GetJson(self:GetServerListUrl(cursor))
+
+        if not success or typeof(response) ~= "table" or typeof(response.data) ~= "table" then
+            break
+        end
+
+        for _, server in ipairs(response.data) do
+            if self:IsHopCandidate(server) then
+                local playing = tonumber(server.playing) or math.huge
+                local maxPlayers = tonumber(server.maxPlayers) or 0
+
+                if not lowPlayerOnly then
+                    return server
+                end
+
+                if playing < bestPlaying then
+                    bestServer = server
+                    bestPlaying = playing
+                end
+
+                if playing <= self:GetLowPlayerLimit(maxPlayers) then
+                    return server
+                end
+            end
+        end
+
+        cursor = response.nextPageCursor
+        if typeof(cursor) ~= "string" or cursor == "" then
+            break
+        end
+
+        task.wait(0.15)
+    end
+
+    return bestServer
+end
+
 function InterfaceManager:ServerHop()
     if self.IsHopping then
         return
@@ -370,33 +508,14 @@ function InterfaceManager:ServerHop()
     task.spawn(function()
         local lowPlayerOnly = self.Settings.LowPlayerHop == true
 
-        local success, response = pcall(function()
-            local url = string.format(
-                "https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100",
-                game.PlaceId
-            )
-            return HttpService:JSONDecode(game:HttpGet(url))
-        end)
+        local targetServer = self:FindServerHopTarget(lowPlayerOnly)
+        local teleportSuccess, teleportError = self:TeleportToHopTarget(targetServer)
 
-        local targetServer
-        if success and response and typeof(response.data) == "table" then
-            for _, server in ipairs(response.data) do
-                if server.id ~= game.JobId and server.playing and server.maxPlayers then
-                    if not lowPlayerOnly or server.playing < (server.maxPlayers * 0.3) then
-                        targetServer = server
-                        break
-                    end
-                end
-            end
+        if not teleportSuccess then
+            self:Notify("Server hop failed", tostring(teleportError), 6)
+        elseif lowPlayerOnly and not targetServer then
+            self:Notify("Server hop", "No low-player server was found; joining another public server.", 6)
         end
-
-        pcall(function()
-            if targetServer then
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer.id, Players.LocalPlayer)
-            else
-                TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
-            end
-        end)
 
         task.wait(5)
         self.IsHopping = false
