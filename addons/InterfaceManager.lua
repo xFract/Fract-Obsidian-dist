@@ -52,6 +52,8 @@ local DEFAULT_SETTINGS = {
     FPSCap = 60,
     AutoRejoin = false,
     LowPlayerHop = false,
+    AntiStuckHop = false,
+    AntiStuckHopSeconds = 300,
     StaffDetector = false,
     WebhookURL = "",
 }
@@ -80,6 +82,7 @@ end
 
 local SERVER_HOP_MAX_PAGES = 5
 local LOW_PLAYER_RATIO = 0.3
+local MAX_ANTI_STUCK_SECONDS = 3600
 
 local InterfaceManager = {}
 InterfaceManager.__index = InterfaceManager
@@ -93,6 +96,9 @@ InterfaceManager.AutoExecuteBound = false
 InterfaceManager.AutoRejoinBound = false
 InterfaceManager.StaffDetectorBound = false
 InterfaceManager.AFKThread = nil
+InterfaceManager.AntiStuckThread = nil
+InterfaceManager.AntiStuckDeadline = nil
+InterfaceManager.AntiStuckStatusLabel = nil
 InterfaceManager.IsRejoining = false
 InterfaceManager.IsHopping = false
 InterfaceManager.OriginalLighting = nil
@@ -302,6 +308,90 @@ function InterfaceManager:SetFPSCap(value)
 
     if type(setfpscap) == "function" then
         setfpscap(value)
+    end
+end
+
+function InterfaceManager:GetAntiStuckSeconds(value)
+    local seconds = tonumber(value or self.Settings.AntiStuckHopSeconds) or DEFAULT_SETTINGS.AntiStuckHopSeconds
+    return math.clamp(math.floor(seconds), 1, MAX_ANTI_STUCK_SECONDS)
+end
+
+function InterfaceManager:FormatDuration(seconds)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remainingSeconds = seconds % 60
+
+    if hours > 0 then
+        return string.format("%d:%02d:%02d", hours, minutes, remainingSeconds)
+    end
+
+    return string.format("%02d:%02d", minutes, remainingSeconds)
+end
+
+function InterfaceManager:UpdateAntiStuckStatus(remainingSeconds)
+    if not self.AntiStuckStatusLabel then
+        return
+    end
+
+    if not self.Settings.AntiStuckHop then
+        self.AntiStuckStatusLabel:SetText(
+            string.format("Anti stuck hop: disabled (delay: %s)", self:FormatDuration(self:GetAntiStuckSeconds()))
+        )
+        return
+    end
+
+    self.AntiStuckStatusLabel:SetText(
+        string.format("Anti stuck hop: %s remaining", self:FormatDuration(remainingSeconds))
+    )
+end
+
+function InterfaceManager:ResetAntiStuckTimer()
+    self.Settings.AntiStuckHopSeconds = self:GetAntiStuckSeconds()
+    self.AntiStuckDeadline = os.clock() + self.Settings.AntiStuckHopSeconds
+    self:UpdateAntiStuckStatus(self.Settings.AntiStuckHopSeconds)
+end
+
+function InterfaceManager:SetAntiStuckHop(enabled)
+    self.Settings.AntiStuckHop = enabled == true
+
+    if self.AntiStuckThread then
+        task.cancel(self.AntiStuckThread)
+        self.AntiStuckThread = nil
+    end
+
+    if not self.Settings.AntiStuckHop then
+        self.AntiStuckDeadline = nil
+        self:UpdateAntiStuckStatus()
+        return
+    end
+
+    self:ResetAntiStuckTimer()
+
+    self.AntiStuckThread = task.spawn(function()
+        while self.Settings.AntiStuckHop do
+            local remainingSeconds = math.max(0, math.ceil((self.AntiStuckDeadline or os.clock()) - os.clock()))
+            self:UpdateAntiStuckStatus(remainingSeconds)
+
+            if remainingSeconds <= 0 then
+                self:Notify("Anti stuck hop", "Timer elapsed; server hopping.", 5)
+                self:ServerHop()
+                self:ResetAntiStuckTimer()
+            end
+
+            task.wait(1)
+        end
+    end)
+end
+
+function InterfaceManager:SetAntiStuckSeconds(value)
+    self.Settings.AntiStuckHopSeconds = self:GetAntiStuckSeconds(value)
+
+    if self.Settings.AntiStuckHop then
+        self:ResetAntiStuckTimer()
+    else
+        self:UpdateAntiStuckStatus()
     end
 end
 
@@ -690,6 +780,10 @@ function InterfaceManager:ApplyLoadedSettings()
         self:SetAntiAFK(true)
     end
 
+    if self.Settings.AntiStuckHop then
+        self:SetAntiStuckHop(true)
+    end
+
     if self.Settings.PerformanceMode then
         self:SetPerformanceMode(true)
     end
@@ -766,6 +860,28 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         Default = self.Settings.LowPlayerHop,
     })
 
+    serverSection:AddToggle("InterfaceManager_AntiStuckHop", {
+        Text = "Anti stuck hop",
+        Default = self.Settings.AntiStuckHop,
+    })
+
+    serverSection:AddSlider("InterfaceManager_AntiStuckHopSeconds", {
+        Text = "Anti stuck seconds",
+        Default = self:GetAntiStuckSeconds(),
+        Min = 1,
+        Max = MAX_ANTI_STUCK_SECONDS,
+        Rounding = 0,
+        Suffix = "s",
+    })
+
+    self.AntiStuckStatusLabel = serverSection:AddLabel("Anti stuck hop: disabled")
+    self:UpdateAntiStuckStatus(
+        if self.Settings.AntiStuckHop and self.AntiStuckDeadline then
+            math.max(0, math.ceil(self.AntiStuckDeadline - os.clock()))
+        else
+            self.Settings.AntiStuckHopSeconds
+    )
+
     serverSection:AddToggle("InterfaceManager_StaffDetector", {
         Text = "Staff detector",
         Default = self.Settings.StaffDetector,
@@ -814,6 +930,16 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
 
     self.Library.Toggles.InterfaceManager_LowPlayerHop:OnChanged(function()
         self.Settings.LowPlayerHop = self.Library.Toggles.InterfaceManager_LowPlayerHop.Value
+        self:SaveSettings()
+    end)
+
+    self.Library.Toggles.InterfaceManager_AntiStuckHop:OnChanged(function()
+        self:SetAntiStuckHop(self.Library.Toggles.InterfaceManager_AntiStuckHop.Value)
+        self:SaveSettings()
+    end)
+
+    self.Library.Options.InterfaceManager_AntiStuckHopSeconds:OnChanged(function()
+        self:SetAntiStuckSeconds(self.Library.Options.InterfaceManager_AntiStuckHopSeconds.Value)
         self:SaveSettings()
     end)
 
