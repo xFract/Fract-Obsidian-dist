@@ -80,9 +80,48 @@ local function getQueueOnTeleport()
     return (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 end
 
+local function safeGet(object, property)
+    if not object then
+        return nil
+    end
+
+    local success, value = pcall(function()
+        return object[property]
+    end)
+
+    return if success then value else nil
+end
+
+local function safeSet(object, property, value)
+    if not object then
+        return false
+    end
+
+    return pcall(function()
+        object[property] = value
+    end)
+end
+
 local SERVER_HOP_MAX_PAGES = 5
 local LOW_PLAYER_RATIO = 0.3
 local MAX_ANTI_STUCK_SECONDS = 3600
+
+local PERFORMANCE_EFFECT_CLASSES = {
+    Beam = true,
+    Fire = true,
+    ParticleEmitter = true,
+    Smoke = true,
+    Sparkles = true,
+    Trail = true,
+}
+
+local PERFORMANCE_POST_EFFECT_CLASSES = {
+    BlurEffect = true,
+    BloomEffect = true,
+    ColorCorrectionEffect = true,
+    DepthOfFieldEffect = true,
+    SunRaysEffect = true,
+}
 
 local InterfaceManager = {}
 InterfaceManager.__index = InterfaceManager
@@ -101,8 +140,10 @@ InterfaceManager.AntiStuckDeadline = nil
 InterfaceManager.AntiStuckStatusLabel = nil
 InterfaceManager.IsRejoining = false
 InterfaceManager.IsHopping = false
-InterfaceManager.OriginalLighting = nil
 InterfaceManager.PerformanceRestore = {}
+InterfaceManager.PerformanceConnections = {}
+InterfaceManager.PerformanceOriginalFPSCap = nil
+InterfaceManager.PerformanceGeneration = 0
 
 function InterfaceManager:SetFolder(folder)
     self.Folder = folder
@@ -232,81 +273,166 @@ end
 function InterfaceManager:SetPerformanceMode(enabled)
     self.Settings.PerformanceMode = enabled == true
 
-    if self.Settings.PerformanceMode then
-        if not self.OriginalLighting then
-            self.OriginalLighting = {
-                GlobalShadows = Lighting.GlobalShadows,
-                FogEnd = Lighting.FogEnd,
-                ShadowSoftness = Lighting.ShadowSoftness,
-            }
-        end
-
-        self.PerformanceRestore = {}
-
-        task.spawn(function()
-            pcall(function()
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 9e9
-                Lighting.ShadowSoftness = 0
-            end)
-
-            pcall(function()
-                for _, instance in ipairs(workspace:GetDescendants()) do
-                    if instance:IsA("BasePart") then
-                        self.PerformanceRestore[instance] = {
-                            Kind = "BasePart",
-                            Material = instance.Material,
-                        }
-                        instance.Material = Enum.Material.SmoothPlastic
-                    elseif instance:IsA("Decal") or instance:IsA("Texture") then
-                        self.PerformanceRestore[instance] = {
-                            Kind = "TextureLike",
-                            Transparency = instance.Transparency,
-                        }
-                        instance.Transparency = 1
-                    elseif instance:IsA("ParticleEmitter") or instance:IsA("Trail") then
-                        self.PerformanceRestore[instance] = {
-                            Kind = "Fx",
-                            Enabled = instance.Enabled,
-                        }
-                        instance.Enabled = false
-                    end
-                end
-            end)
-        end)
-
+    if not self.Settings.PerformanceMode then
+        self:RestorePerformanceMode()
         return
     end
 
-    if self.OriginalLighting then
-        pcall(function()
-            Lighting.GlobalShadows = self.OriginalLighting.GlobalShadows
-            Lighting.FogEnd = self.OriginalLighting.FogEnd
-            Lighting.ShadowSoftness = self.OriginalLighting.ShadowSoftness
-        end)
+    self:ApplyUltraPerformanceMode()
+end
+
+function InterfaceManager:RememberPerformanceValue(object, property, value)
+    if not object then
+        return
     end
 
+    local objectValues = self.PerformanceRestore[object]
+    if not objectValues then
+        objectValues = {}
+        self.PerformanceRestore[object] = objectValues
+    end
+
+    if objectValues[property] == nil then
+        objectValues[property] = safeGet(object, property)
+    end
+
+    safeSet(object, property, value)
+end
+
+function InterfaceManager:ApplyPerformanceInstance(instance)
+    if not self.Settings.PerformanceMode or not instance then
+        return
+    end
+
+    if instance:IsA("BasePart") then
+        self:RememberPerformanceValue(instance, "CastShadow", false)
+        self:RememberPerformanceValue(instance, "Material", Enum.Material.SmoothPlastic)
+        return
+    end
+
+    if instance:IsA("Decal") or instance:IsA("Texture") then
+        self:RememberPerformanceValue(instance, "Transparency", 1)
+        return
+    end
+
+    if PERFORMANCE_EFFECT_CLASSES[instance.ClassName] then
+        self:RememberPerformanceValue(instance, "Enabled", false)
+        return
+    end
+
+    if instance:IsA("Atmosphere") then
+        self:RememberPerformanceValue(instance, "Density", 0)
+        self:RememberPerformanceValue(instance, "Haze", 0)
+        return
+    end
+
+    if PERFORMANCE_POST_EFFECT_CLASSES[instance.ClassName] then
+        self:RememberPerformanceValue(instance, "Enabled", false)
+    end
+end
+
+function InterfaceManager:TrackPerformanceConnection(connection)
+    if connection then
+        self.PerformanceConnections[#self.PerformanceConnections + 1] = connection
+    end
+end
+
+function InterfaceManager:ApplyUltraPerformanceMode()
+    self:RestorePerformanceMode(true)
+
+    self.Settings.PerformanceMode = true
+    self.PerformanceGeneration = self.PerformanceGeneration + 1
+
+    local performanceGeneration = self.PerformanceGeneration
+    local renderingSettings = nil
     pcall(function()
-        for instance, state in pairs(self.PerformanceRestore) do
-            if instance and instance.Parent then
-                if state.Kind == "BasePart" then
-                    instance.Material = state.Material
-                elseif state.Kind == "TextureLike" then
-                    instance.Transparency = state.Transparency
-                elseif state.Kind == "Fx" then
-                    instance.Enabled = state.Enabled
+        renderingSettings = settings().Rendering
+    end)
+
+    local terrain = workspace and workspace:FindFirstChildOfClass("Terrain") or nil
+
+    self:RememberPerformanceValue(Lighting, "GlobalShadows", false)
+    self:RememberPerformanceValue(Lighting, "FogEnd", 1000000000)
+    self:RememberPerformanceValue(Lighting, "Brightness", 1)
+    self:RememberPerformanceValue(Lighting, "ShadowSoftness", 0)
+
+    self:RememberPerformanceValue(terrain, "Decoration", false)
+    self:RememberPerformanceValue(terrain, "WaterWaveSize", 0)
+    self:RememberPerformanceValue(terrain, "WaterReflectance", 0)
+    self:RememberPerformanceValue(terrain, "WaterTransparency", 1)
+    self:RememberPerformanceValue(renderingSettings, "QualityLevel", Enum.QualityLevel.Level01)
+
+    if type(setfpscap) == "function" then
+        if self.PerformanceOriginalFPSCap == nil and type(getfpscap) == "function" then
+            local success, fpsCap = pcall(getfpscap)
+            if success then
+                self.PerformanceOriginalFPSCap = fpsCap
+            end
+        end
+
+        pcall(setfpscap, 30)
+    end
+
+    task.spawn(function()
+        for _, container in ipairs({ workspace, Lighting }) do
+            if self.Settings.PerformanceMode and self.PerformanceGeneration == performanceGeneration and container then
+                pcall(function()
+                    for _, descendant in ipairs(container:GetDescendants()) do
+                        self:ApplyPerformanceInstance(descendant)
+                    end
+                end)
+
+                if self.Settings.PerformanceMode and self.PerformanceGeneration == performanceGeneration then
+                    self:TrackPerformanceConnection(container.DescendantAdded:Connect(function(descendant)
+                        task.defer(function()
+                            if self.PerformanceGeneration == performanceGeneration then
+                                self:ApplyPerformanceInstance(descendant)
+                            end
+                        end)
+                    end))
                 end
             end
         end
     end)
+end
 
+function InterfaceManager:RestorePerformanceMode(keepEnabled)
+    self.PerformanceGeneration = self.PerformanceGeneration + 1
+
+    for _, connection in ipairs(self.PerformanceConnections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    table.clear(self.PerformanceConnections)
+
+    for object, properties in pairs(self.PerformanceRestore) do
+        if object then
+            for property, value in pairs(properties) do
+                safeSet(object, property, value)
+            end
+        end
+    end
+
+    table.clear(self.PerformanceRestore)
     self.PerformanceRestore = {}
+
+    if self.PerformanceOriginalFPSCap ~= nil and type(setfpscap) == "function" then
+        pcall(setfpscap, self.PerformanceOriginalFPSCap)
+    end
+
+    self.PerformanceOriginalFPSCap = nil
+
+    if not keepEnabled then
+        self.Settings.PerformanceMode = false
+    end
 end
 
 function InterfaceManager:SetFPSCap(value)
     self.Settings.FPSCap = value
 
-    if type(setfpscap) == "function" then
+    if not self.Settings.PerformanceMode and type(setfpscap) == "function" then
         setfpscap(value)
     end
 end
@@ -788,7 +914,7 @@ function InterfaceManager:ApplyLoadedSettings()
         self:SetPerformanceMode(true)
     end
 
-    if type(setfpscap) == "function" then
+    if not self.Settings.PerformanceMode and type(setfpscap) == "function" then
         self:SetFPSCap(self.Settings.FPSCap or DEFAULT_SETTINGS.FPSCap)
     end
 
@@ -838,7 +964,7 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
     })
 
     utilitySection:AddToggle("InterfaceManager_PerformanceMode", {
-        Text = "Performance mode",
+        Text = "Ultra Performance Mode",
         Default = self.Settings.PerformanceMode,
     })
 
