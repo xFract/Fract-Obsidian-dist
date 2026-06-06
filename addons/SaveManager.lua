@@ -126,6 +126,17 @@ local SaveManager = {} do
                 end
             end,
         },
+        FeatureCard = {
+            Save = function(idx, object)
+                return { type = "FeatureCard", idx = idx, value = object.Value }
+            end,
+            Load = function(idx, data)
+                local object = SaveManager.Library.Toggles[idx]
+                if object and object.Value ~= data.value then
+                    object:SetValue(data.value)
+                end
+            end,
+        },
         Slider = {
             Save = function(idx, object)
                 return { type = "Slider", idx = idx, value = tostring(object.Value) }
@@ -187,7 +198,8 @@ local SaveManager = {} do
 
     function SaveManager:IgnoreThemeSettings()
         self:SetIgnoreIndexes({
-            "BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "FontFace", -- themes
+            "BackgroundColor", "MainColor", "SurfaceColor", "SurfaceAltColor", "AccentColor", "OutlineColor", -- themes
+            "FontColor", "MutedFontColor", "SuccessColor", "WarningColor", "InfoColor", "DestructiveColor", "FontFace", -- themes
             "ThemeManager_ThemeList", "ThemeManager_CustomThemeList", "ThemeManager_CustomThemeName", -- themes
         })
     end
@@ -479,17 +491,21 @@ local SaveManager = {} do
     function SaveManager:BuildConfigSection(tab, side)
         assert(self.Library, "Must set SaveManager.Library")
 
+        local function getAutoloadText(name)
+            return string.format("Current autoload config: %s", tostring(name or "none"))
+        end
+
         side = (typeof(side) == "string" and side:lower()) or "right"
 
         local section
         if side == "left" then
-            section = tab:AddLeftGroupbox("Configuration", "folder-cog")
+            section = tab:AddLeftGroupbox({ Name = "Configuration", IconName = "folder-cog", LocaleKey = "manager.save.configuration" })
         else
-            section = tab:AddRightGroupbox("Configuration", "folder-cog")
+            section = tab:AddRightGroupbox({ Name = "Configuration", IconName = "folder-cog", LocaleKey = "manager.save.configuration" })
         end
 
-        section:AddInput("SaveManager_ConfigName",    { Text = "Config name" })
-        section:AddButton("Create config", function()
+        local configNameInput = section:AddInput("SaveManager_ConfigName", { Text = "Config name", LocaleKey = "manager.save.config_name" })
+        local createConfigButton = section:AddButton("Create config", function()
             local name = self.Library.Options.SaveManager_ConfigName.Value
 
             if name:gsub(" ", "") == "" then
@@ -510,8 +526,8 @@ local SaveManager = {} do
 
         section:AddDivider()
 
-        section:AddDropdown("SaveManager_ConfigList", { Text = "Config list", Values = self:RefreshConfigList(), AllowNull = true })
-        section:AddButton("Load config", function()
+        local configListDropdown = section:AddDropdown("SaveManager_ConfigList", { Text = "Config list", LocaleKey = "manager.save.config_list", Values = self:RefreshConfigList(), AllowNull = true })
+        local loadConfigButton = section:AddButton("Load config", function()
             local name = self.Library.Options.SaveManager_ConfigList.Value
 
             local success, err = self:Load(name)
@@ -522,7 +538,7 @@ local SaveManager = {} do
 
             self.Library:Notify(string.format("Loaded config %q", name))
         end)
-        section:AddButton("Overwrite config", function()
+        local overwriteConfigButton = section:AddButton("Overwrite config", function()
             local name = self.Library.Options.SaveManager_ConfigList.Value
 
             local success, err = self:Save(name)
@@ -534,7 +550,7 @@ local SaveManager = {} do
             self.Library:Notify(string.format("Overwrote config %q", name))
         end)
 
-        section:AddButton("Delete config", function()
+        local deleteConfigButton = section:AddButton("Delete config", function()
             local name = self.Library.Options.SaveManager_ConfigList.Value
 
             local success, err = self:Delete(name)
@@ -548,12 +564,12 @@ local SaveManager = {} do
             self.Library.Options.SaveManager_ConfigList:SetValue(nil)
         end)
 
-        section:AddButton("Refresh list", function()
+        local refreshListButton = section:AddButton("Refresh list", function()
             self.Library.Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
             self.Library.Options.SaveManager_ConfigList:SetValue(nil)
         end)
 
-        section:AddButton("Set as autoload", function()
+        local setAutoloadButton = section:AddButton("Set as autoload", function()
             local name = self.Library.Options.SaveManager_ConfigList.Value
 
             local success, err = self:SaveAutoloadConfig(name)
@@ -563,9 +579,9 @@ local SaveManager = {} do
             end
 
             self.Library:Notify(string.format("Set %q to auto load", name))
-            self.AutoloadConfigLabel:SetText("Current autoload config: " .. name)
+            self.AutoloadConfigLabel:SetText(getAutoloadText(name))
         end)
-        section:AddButton("Reset autoload", function()
+        local resetAutoloadButton = section:AddButton("Reset autoload", function()
             local success, err = self:DeleteAutoLoadConfig()
             if not success then
                 self.Library:Notify("Failed to set autoload config: " .. err)
@@ -573,10 +589,29 @@ local SaveManager = {} do
             end
 
             self.Library:Notify("Set autoload to none")
-            self.AutoloadConfigLabel:SetText("Current autoload config: none")
+            self.AutoloadConfigLabel:SetText(getAutoloadText("none"))
         end)
 
-        self.AutoloadConfigLabel = section:AddLabel("Current autoload config: " .. self:GetAutoloadConfig(), true)
+        self.AutoloadConfigLabel = section:AddLabel({
+            Text = getAutoloadText(self:GetAutoloadConfig()),
+            DoesWrap = true,
+            LocaleKey = "manager.save.autoload_value",
+            LocaleParams = function()
+                return { name = tostring(self:GetAutoloadConfig() or "none") }
+            end,
+        })
+
+        for object, key in {
+            [createConfigButton] = "manager.save.create",
+            [loadConfigButton] = "manager.save.load",
+            [overwriteConfigButton] = "manager.save.overwrite",
+            [deleteConfigButton] = "manager.save.delete",
+            [refreshListButton] = "manager.save.refresh",
+            [setAutoloadButton] = "manager.save.set_autoload",
+            [resetAutoloadButton] = "manager.save.reset_autoload",
+        } do
+            self.Library:RegisterLocaleObject(object, { Text = key })
+        end
 
         -- self:LoadAutoloadConfig()
         self:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName" })

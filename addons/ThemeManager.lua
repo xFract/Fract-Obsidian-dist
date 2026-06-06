@@ -40,7 +40,20 @@ end
 
 local ThemeManager = {}
 do
-    local ThemeFields = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
+    local ThemeFields = {
+        "FontColor",
+        "MutedFontColor",
+        "BackgroundColor",
+        "MainColor",
+        "SurfaceColor",
+        "SurfaceAltColor",
+        "AccentColor",
+        "OutlineColor",
+        "SuccessColor",
+        "WarningColor",
+        "InfoColor",
+        "DestructiveColor",
+    }
     ThemeManager.Folder = "ObsidianLibSettings"
     -- if not isfolder(ThemeManager.Folder) then makefolder(ThemeManager.Folder) end
 
@@ -49,74 +62,121 @@ do
     ThemeManager.BuiltInThemes = {
         ["Default"] = {
             1,
-            { FontColor = "ffffff", MainColor = "191919", AccentColor = "00aec6", BackgroundColor = "0f0f0f", OutlineColor = "282828" },
+            {
+                FontColor = "ffffff",
+                MutedFontColor = "8e9aaa",
+                BackgroundColor = "05070a",
+                MainColor = "0c1016",
+                SurfaceColor = "11161e",
+                SurfaceAltColor = "171e2a",
+                AccentColor = "60a5fa",
+                OutlineColor = "344354",
+                SuccessColor = "4a9f7f",
+                WarningColor = "8b74ca",
+                InfoColor = "5694c6",
+                DestructiveColor = "f43f5e",
+            },
+        },
+        ["Fract Midnight"] = {
+            2,
+            {
+                FontColor = "f8fcff",
+                MutedFontColor = "8c98a8",
+                BackgroundColor = "030508",
+                MainColor = "090e15",
+                SurfaceColor = "101720",
+                SurfaceAltColor = "172032",
+                AccentColor = "5f9ee6",
+                OutlineColor = "2d4056",
+                SuccessColor = "4a9f7f",
+                WarningColor = "8070b8",
+                InfoColor = "5694c6",
+                DestructiveColor = "f43f5e",
+            },
+        },
+        ["Fract Neon"] = {
+            3,
+            {
+                FontColor = "f9fafb",
+                MutedFontColor = "9895b0",
+                BackgroundColor = "06050d",
+                MainColor = "0f0d1c",
+                SurfaceColor = "171426",
+                SurfaceAltColor = "1d2135",
+                AccentColor = "8b7bd8",
+                OutlineColor = "3d3a58",
+                SuccessColor = "4a9f7f",
+                WarningColor = "8b74ca",
+                InfoColor = "648fc6",
+                DestructiveColor = "fb7185",
+            },
         },
         ["BBot"] = {
-            2,
+            4,
             { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414" },
         },
         ["Fatality"] = {
-            3,
+            5,
             { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d" },
         },
         ["Jester"] = {
-            4,
+            6,
             { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
         },
         ["Mint"] = {
-            5,
+            7,
             { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737" },
         },
         ["Tokyo Night"] = {
-            6,
+            8,
             { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232" },
         },
         ["Ubuntu"] = {
-            7,
+            9,
             { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919" },
         },
         ["Quartz"] = {
-            8,
+            10,
             { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f" },
         },
         ["Nord"] = {
-            9,
+            11,
             { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a" },
         },
         ["Dracula"] = {
-            10,
+            12,
             { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4" },
         },
         ["Monokai"] = {
-            11,
+            13,
             { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e" },
         },
         ["Gruvbox"] = {
-            12,
+            14,
             { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945" },
         },
         ["Solarized"] = {
-            13,
+            15,
             { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75" },
         },
         ["Catppuccin"] = {
-            14,
+            16,
             { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268" },
         },
         ["One Dark"] = {
-            15,
+            17,
             { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370" },
         },
         ["Cyberpunk"] = {
-            16,
+            18,
             { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e" },
         },
         ["Oceanic Next"] = {
-            17,
+            19,
             { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46" },
         },
         ["Material"] = {
-            18,
+            20,
             { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242" },
         }
     }
@@ -185,6 +245,24 @@ do
         end
     end
 
+    function ThemeManager:GetFallbackThemeValue(field, theme)
+        local defaultTheme = self.BuiltInThemes["Default"][2]
+
+        if theme and theme[field] then
+            return theme[field]
+        end
+
+        if field == "SurfaceColor" then
+            return (theme and theme.MainColor) or defaultTheme.SurfaceColor
+        elseif field == "SurfaceAltColor" then
+            return (theme and theme.MainColor) or defaultTheme.SurfaceAltColor
+        elseif field == "MutedFontColor" then
+            return (theme and theme.FontColor) or defaultTheme.MutedFontColor
+        end
+
+        return defaultTheme[field]
+    end
+
     --// Apply, Update theme \\--
     function ThemeManager:ApplyTheme(theme)
         local customThemeData = self:GetCustomTheme(theme)
@@ -195,12 +273,25 @@ do
         end
 
         local scheme = data[2]
+        for _, idx in ThemeFields do
+            local val = self:GetFallbackThemeValue(idx, customThemeData or scheme)
+            if not val then
+                continue
+            end
+
+            self.Library.Scheme[idx] = Color3.fromHex(val)
+
+            if self.Library.Options[idx] then
+                self.Library.Options[idx]:SetValueRGB(Color3.fromHex(val))
+            end
+        end
+
         for idx, val in pairs(customThemeData or scheme) do
             if idx == "VideoLink" then
                 continue
             elseif idx == "FontFace" then
                 self:ApplyFont(val)
-            else
+            elseif not table.find(ThemeFields, idx) then
                 self.Library.Scheme[idx] = Color3.fromHex(val)
 
                 if self.Library.Options[idx] then
@@ -373,17 +464,40 @@ do
 
     --// GUI \\--
     function ThemeManager:CreateThemeManager(groupbox)
+        local function addLabel(text, key)
+            return groupbox:AddLabel({ Text = text, LocaleKey = key })
+        end
+        local function addButton(text, key, callback)
+            local button = groupbox:AddButton(text, callback)
+            self.Library:RegisterLocaleObject(button, { Text = key })
+            return button
+        end
+
         groupbox
-            :AddLabel("Background color")
+            :AddLabel({ Text = "Background color", LocaleKey = "manager.theme.background" })
             :AddColorPicker("BackgroundColor", { Default = self.Library.Scheme.BackgroundColor })
-        groupbox:AddLabel("Main color"):AddColorPicker("MainColor", { Default = self.Library.Scheme.MainColor })
-        groupbox:AddLabel("Accent color"):AddColorPicker("AccentColor", { Default = self.Library.Scheme.AccentColor })
+        addLabel("Main color", "manager.theme.main"):AddColorPicker("MainColor", { Default = self.Library.Scheme.MainColor })
+        addLabel("Surface color", "manager.theme.surface"):AddColorPicker("SurfaceColor", { Default = self.Library.Scheme.SurfaceColor })
         groupbox
-            :AddLabel("Outline color")
+            :AddLabel({ Text = "Surface alt color", LocaleKey = "manager.theme.surface_alt" })
+            :AddColorPicker("SurfaceAltColor", { Default = self.Library.Scheme.SurfaceAltColor })
+        addLabel("Accent color", "manager.theme.accent"):AddColorPicker("AccentColor", { Default = self.Library.Scheme.AccentColor })
+        groupbox
+            :AddLabel({ Text = "Outline color", LocaleKey = "manager.theme.outline" })
             :AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
-        groupbox:AddLabel("Font color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
+        addLabel("Font color", "manager.theme.font_color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
+        groupbox
+            :AddLabel({ Text = "Muted font color", LocaleKey = "manager.theme.muted_font" })
+            :AddColorPicker("MutedFontColor", { Default = self.Library.Scheme.MutedFontColor })
+        addLabel("Success color", "manager.theme.success"):AddColorPicker("SuccessColor", { Default = self.Library.Scheme.SuccessColor })
+        addLabel("Warning color", "manager.theme.warning"):AddColorPicker("WarningColor", { Default = self.Library.Scheme.WarningColor })
+        addLabel("Info color", "manager.theme.info"):AddColorPicker("InfoColor", { Default = self.Library.Scheme.InfoColor })
+        groupbox
+            :AddLabel({ Text = "Destructive color", LocaleKey = "manager.theme.destructive" })
+            :AddColorPicker("DestructiveColor", { Default = self.Library.Scheme.DestructiveColor })
         groupbox:AddDropdown("FontFace", {
-            Text = "Font Face",
+            Text = "Font",
+            LocaleKey = "manager.theme.font",
             Default = "RobotoMono",
             Values = { "BuilderSans", "Code", "Fantasy", "Gotham", "Jura", "Roboto", "RobotoMono", "SourceSans" },
         })
@@ -399,8 +513,8 @@ do
 
         groupbox:AddDivider()
 
-        groupbox:AddDropdown("ThemeManager_ThemeList", { Text = "Theme list", Values = ThemesArray, Default = 1 })
-        groupbox:AddButton("Set as default", function()
+        groupbox:AddDropdown("ThemeManager_ThemeList", { Text = "Theme list", LocaleKey = "manager.theme.list", Values = ThemesArray, Default = 1 })
+        addButton("Set as default", "manager.theme.set_default", function()
             self:SaveDefault(self.Library.Options.ThemeManager_ThemeList.Value)
             self.Library:Notify(
                 string.format("Set default theme to %q", self.Library.Options.ThemeManager_ThemeList.Value)
@@ -413,8 +527,8 @@ do
 
         groupbox:AddDivider()
 
-        groupbox:AddInput("ThemeManager_CustomThemeName", { Text = "Custom theme name" })
-        groupbox:AddButton("Create theme", function()
+        groupbox:AddInput("ThemeManager_CustomThemeName", { Text = "Custom theme name", LocaleKey = "manager.theme.custom_name" })
+        addButton("Create theme", "manager.theme.create", function()
             local name = self.Library.Options.ThemeManager_CustomThemeName.Value
 
             if name:gsub(" ", "") == "" then
@@ -433,21 +547,21 @@ do
 
         groupbox:AddDropdown(
             "ThemeManager_CustomThemeList",
-            { Text = "Custom themes", Values = self:ReloadCustomThemes(), AllowNull = true, Default = 1 }
+            { Text = "Theme list", LocaleKey = "manager.theme.list", Values = self:ReloadCustomThemes(), AllowNull = true, Default = 1 }
         )
-        groupbox:AddButton("Load theme", function()
+        addButton("Load theme", "manager.theme.load", function()
             local name = self.Library.Options.ThemeManager_CustomThemeList.Value
 
             self:ApplyTheme(name)
             self.Library:Notify(string.format("Loaded theme %q", name))
         end)
-        groupbox:AddButton("Overwrite theme", function()
+        addButton("Overwrite theme", "manager.theme.overwrite", function()
             local name = self.Library.Options.ThemeManager_CustomThemeList.Value
 
             self:SaveCustomTheme(name)
             self.Library:Notify(string.format("Overwrote config %q", name))
         end)
-        groupbox:AddButton("Delete theme", function()
+        addButton("Delete theme", "manager.theme.delete", function()
             local name = self.Library.Options.ThemeManager_CustomThemeList.Value
 
             local success, err = self:Delete(name)
@@ -460,11 +574,11 @@ do
             self.Library.Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
             self.Library.Options.ThemeManager_CustomThemeList:SetValue(nil)
         end)
-        groupbox:AddButton("Refresh list", function()
+        addButton("Refresh list", "manager.theme.refresh", function()
             self.Library.Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
             self.Library.Options.ThemeManager_CustomThemeList:SetValue(nil)
         end)
-        groupbox:AddButton("Set as default", function()
+        addButton("Set as default", "manager.theme.set_default", function()
             if
                 self.Library.Options.ThemeManager_CustomThemeList.Value ~= nil
                 and self.Library.Options.ThemeManager_CustomThemeList.Value ~= ""
@@ -475,7 +589,7 @@ do
                 )
             end
         end)
-        groupbox:AddButton("Reset default", function()
+        addButton("Reset default", "manager.theme.reset_default", function()
             local success = pcall(delfile, self.Folder .. "/themes/default.txt")
             if not success then
                 self.Library:Notify("Failed to reset default: delete file error")
@@ -497,9 +611,16 @@ do
 
         self.Library.Options.BackgroundColor:OnChanged(UpdateTheme)
         self.Library.Options.MainColor:OnChanged(UpdateTheme)
+        self.Library.Options.SurfaceColor:OnChanged(UpdateTheme)
+        self.Library.Options.SurfaceAltColor:OnChanged(UpdateTheme)
         self.Library.Options.AccentColor:OnChanged(UpdateTheme)
         self.Library.Options.OutlineColor:OnChanged(UpdateTheme)
         self.Library.Options.FontColor:OnChanged(UpdateTheme)
+        self.Library.Options.MutedFontColor:OnChanged(UpdateTheme)
+        self.Library.Options.SuccessColor:OnChanged(UpdateTheme)
+        self.Library.Options.WarningColor:OnChanged(UpdateTheme)
+        self.Library.Options.InfoColor:OnChanged(UpdateTheme)
+        self.Library.Options.DestructiveColor:OnChanged(UpdateTheme)
         self.Library.Options.FontFace:OnChanged(function(Value)
             self.Library:SetFont(self:ResolveFont(Value))
             self.Library:UpdateColorsUsingRegistry()
@@ -508,7 +629,7 @@ do
 
     function ThemeManager:CreateGroupBox(tab)
         assert(self.Library, "Must set ThemeManager.Library first!")
-        return tab:AddLeftGroupbox("Themes", "paintbrush")
+        return tab:AddLeftGroupbox({ Name = "Theme settings", IconName = "paintbrush", LocaleKey = "manager.theme.settings" })
     end
 
     function ThemeManager:ApplyToTab(tab)

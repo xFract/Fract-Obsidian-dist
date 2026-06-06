@@ -134,6 +134,8 @@ InterfaceManager.AutoExecuteSource = nil
 InterfaceManager.AutoExecuteBound = false
 InterfaceManager.AutoRejoinBound = false
 InterfaceManager.StaffDetectorBound = false
+InterfaceManager.UnloadLibrary = nil
+InterfaceManager.RuntimeConnections = {}
 InterfaceManager.AFKThread = nil
 InterfaceManager.AntiStuckThread = nil
 InterfaceManager.AntiStuckDeadline = nil
@@ -152,6 +154,13 @@ end
 
 function InterfaceManager:SetLibrary(library)
     self.Library = library
+
+    if library and library ~= self.UnloadLibrary and typeof(library.OnUnload) == "function" then
+        self.UnloadLibrary = library
+        library:OnUnload(function()
+            self:CleanupRuntime()
+        end)
+    end
 end
 
 function InterfaceManager:SetWindow(window)
@@ -337,6 +346,41 @@ function InterfaceManager:TrackPerformanceConnection(connection)
     end
 end
 
+function InterfaceManager:TrackRuntimeConnection(connection)
+    if connection then
+        self.RuntimeConnections[#self.RuntimeConnections + 1] = connection
+    end
+
+    return connection
+end
+
+function InterfaceManager:CleanupRuntime()
+    if self.AFKThread then
+        task.cancel(self.AFKThread)
+        self.AFKThread = nil
+    end
+
+    if self.AntiStuckThread then
+        task.cancel(self.AntiStuckThread)
+        self.AntiStuckThread = nil
+    end
+
+    for _, connection in ipairs(self.RuntimeConnections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(self.RuntimeConnections)
+
+    self.AutoExecuteBound = false
+    self.AutoRejoinBound = false
+    self.StaffDetectorBound = false
+    self.IsRejoining = false
+    self.IsHopping = false
+    self.AntiStuckDeadline = nil
+    self:RestorePerformanceMode()
+end
+
 function InterfaceManager:ApplyUltraPerformanceMode()
     self:RestorePerformanceMode(true)
 
@@ -462,15 +506,17 @@ function InterfaceManager:UpdateAntiStuckStatus(remainingSeconds)
     end
 
     if not self.Settings.AntiStuckHop then
-        self.AntiStuckStatusLabel:SetText(
-            string.format("Anti stuck hop: disabled (delay: %s)", self:FormatDuration(self:GetAntiStuckSeconds()))
-        )
+        local time = self:FormatDuration(self:GetAntiStuckSeconds())
+        local localeManager = self.Library and self.Library.LocaleManager
+        self.AntiStuckStatusLabel:SetText(localeManager and localeManager:T("manager.interface.anti_stuck_disabled_delay", { time = time })
+            or string.format("Anti stuck hop: disabled (delay: %s)", time))
         return
     end
 
-    self.AntiStuckStatusLabel:SetText(
-        string.format("Anti stuck hop: %s remaining", self:FormatDuration(remainingSeconds))
-    )
+    local time = self:FormatDuration(remainingSeconds)
+    local localeManager = self.Library and self.Library.LocaleManager
+    self.AntiStuckStatusLabel:SetText(localeManager and localeManager:T("manager.interface.anti_stuck_remaining", { time = time })
+        or string.format("Anti stuck hop: %s remaining", time))
 end
 
 function InterfaceManager:ResetAntiStuckTimer()
@@ -796,18 +842,18 @@ function InterfaceManager:BindAutoRejoin()
         promptOverlay = promptOverlay and promptOverlay:FindFirstChild("promptOverlay")
 
         if promptOverlay then
-            promptOverlay.ChildAdded:Connect(function(child)
+            self:TrackRuntimeConnection(promptOverlay.ChildAdded:Connect(function(child)
                 if child.Name == "ErrorPrompt" then
                     triggerRejoin()
                 end
-            end)
+            end))
         end
     end)
 
     pcall(function()
-        GuiService.ErrorMessageChanged:Connect(function()
+        self:TrackRuntimeConnection(GuiService.ErrorMessageChanged:Connect(function()
             triggerRejoin()
-        end)
+        end))
     end)
 end
 
@@ -843,7 +889,7 @@ function InterfaceManager:BindStaffDetector()
         self:ServerHop()
     end
 
-    Players.PlayerAdded:Connect(checkPlayer)
+    self:TrackRuntimeConnection(Players.PlayerAdded:Connect(checkPlayer))
 
     task.spawn(function()
         for _, player in ipairs(Players:GetPlayers()) do
@@ -865,14 +911,14 @@ function InterfaceManager:BindTeleportAutoExecute()
     self.AutoExecuteBound = true
 
     local queued = false
-    Players.LocalPlayer.OnTeleport:Connect(function()
+    self:TrackRuntimeConnection(Players.LocalPlayer.OnTeleport:Connect(function()
         if queued or not self.Settings.AutoExecute then
             return
         end
 
         queueOnTeleport(self.AutoExecuteSource)
         queued = true
-    end)
+    end))
 end
 
 function InterfaceManager:GetWindowVisible()
@@ -939,60 +985,69 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
     local serverSection
 
     if side == "left" then
-        appearanceSection = tab:AddLeftGroupbox("Appearance", "paintbrush")
-        utilitySection = tab:AddLeftGroupbox("Utility", "wrench")
-        serverSection = tab:AddLeftGroupbox("Server & Safety", "shield")
+        appearanceSection = tab:AddLeftGroupbox({ Name = "Interface", IconName = "paintbrush", LocaleKey = "manager.interface.appearance" })
+        utilitySection = tab:AddLeftGroupbox({ Name = "Utility", IconName = "wrench", LocaleKey = "manager.interface.utility" })
+        serverSection = tab:AddLeftGroupbox({ Name = "Server", IconName = "shield", LocaleKey = "manager.interface.server" })
     else
-        appearanceSection = tab:AddRightGroupbox("Appearance", "paintbrush")
-        utilitySection = tab:AddRightGroupbox("Utility", "wrench")
-        serverSection = tab:AddRightGroupbox("Server & Safety", "shield")
+        appearanceSection = tab:AddRightGroupbox({ Name = "Interface", IconName = "paintbrush", LocaleKey = "manager.interface.appearance" })
+        utilitySection = tab:AddRightGroupbox({ Name = "Utility", IconName = "wrench", LocaleKey = "manager.interface.utility" })
+        serverSection = tab:AddRightGroupbox({ Name = "Server", IconName = "shield", LocaleKey = "manager.interface.server" })
     end
 
-    appearanceSection:AddToggle("InterfaceManager_AutoMinimize", {
+    local autoMinimizeToggle = appearanceSection:AddToggle("InterfaceManager_AutoMinimize", {
         Text = "Auto minimize",
+        LocaleKey = "manager.interface.auto_minimize",
         Default = self.Settings.AutoMinimize,
     })
 
-    utilitySection:AddToggle("InterfaceManager_AutoExecute", {
+    local autoExecuteToggle = utilitySection:AddToggle("InterfaceManager_AutoExecute", {
         Text = "Auto execute",
+        LocaleKey = "manager.interface.auto_execute",
         Default = self.Settings.AutoExecute,
     })
 
-    utilitySection:AddToggle("InterfaceManager_AntiAFK", {
+    local antiAfkToggle = utilitySection:AddToggle("InterfaceManager_AntiAFK", {
         Text = "Anti AFK",
+        LocaleKey = "manager.interface.anti_afk",
         Default = self.Settings.AntiAFK,
     })
 
-    utilitySection:AddToggle("InterfaceManager_PerformanceMode", {
+    local performanceModeToggle = utilitySection:AddToggle("InterfaceManager_PerformanceMode", {
         Text = "Ultra Performance Mode",
+        LocaleKey = "manager.interface.performance",
         Default = self.Settings.PerformanceMode,
     })
 
-    utilitySection:AddSlider("InterfaceManager_FPSCap", {
+    local fpsCapSlider = utilitySection:AddSlider("InterfaceManager_FPSCap", {
         Text = "FPS Cap",
+        LocaleKey = "manager.interface.fps_cap",
         Default = self.Settings.FPSCap or DEFAULT_SETTINGS.FPSCap,
         Min = 15,
         Max = 240,
         Rounding = 0,
     })
 
-    serverSection:AddToggle("InterfaceManager_AutoRejoin", {
+    local autoRejoinToggle = serverSection:AddToggle("InterfaceManager_AutoRejoin", {
         Text = "Auto rejoin",
+        LocaleKey = "manager.interface.auto_rejoin",
         Default = self.Settings.AutoRejoin,
     })
 
-    serverSection:AddToggle("InterfaceManager_LowPlayerHop", {
+    local lowPlayerHopToggle = serverSection:AddToggle("InterfaceManager_LowPlayerHop", {
         Text = "Low player hop",
+        LocaleKey = "manager.interface.low_player_hop",
         Default = self.Settings.LowPlayerHop,
     })
 
-    serverSection:AddToggle("InterfaceManager_AntiStuckHop", {
+    local antiStuckHopToggle = serverSection:AddToggle("InterfaceManager_AntiStuckHop", {
         Text = "Anti stuck hop",
+        LocaleKey = "manager.interface.anti_stuck_hop",
         Default = self.Settings.AntiStuckHop,
     })
 
-    serverSection:AddSlider("InterfaceManager_AntiStuckHopSeconds", {
+    local antiStuckSecondsSlider = serverSection:AddSlider("InterfaceManager_AntiStuckHopSeconds", {
         Text = "Anti stuck seconds",
+        LocaleKey = "manager.interface.anti_stuck_seconds",
         Default = self:GetAntiStuckSeconds(),
         Min = 1,
         Max = MAX_ANTI_STUCK_SECONDS,
@@ -1000,7 +1055,13 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
         Suffix = "s",
     })
 
-    self.AntiStuckStatusLabel = serverSection:AddLabel("Anti stuck hop: disabled")
+    self.AntiStuckStatusLabel = serverSection:AddLabel({
+        Text = "Anti stuck hop: disabled",
+        LocaleKey = "manager.interface.anti_stuck_disabled_delay",
+        LocaleParams = function()
+            return { time = self:FormatDuration(self:GetAntiStuckSeconds()) }
+        end,
+    })
     self:UpdateAntiStuckStatus(
         if self.Settings.AntiStuckHop and self.AntiStuckDeadline then
             math.max(0, math.ceil(self.AntiStuckDeadline - os.clock()))
@@ -1008,21 +1069,27 @@ function InterfaceManager:BuildInterfaceSection(tab, side)
             self.Settings.AntiStuckHopSeconds
     )
 
-    serverSection:AddToggle("InterfaceManager_StaffDetector", {
+    local staffDetectorToggle = serverSection:AddToggle("InterfaceManager_StaffDetector", {
         Text = "Staff detector",
+        LocaleKey = "manager.interface.staff_detector",
         Default = self.Settings.StaffDetector,
     })
 
-    serverSection:AddInput("InterfaceManager_WebhookURL", {
+    local webhookInput = serverSection:AddInput("InterfaceManager_WebhookURL", {
         Text = "Discord webhook URL",
+        LocaleKey = "manager.interface.webhook_url",
         Default = self.Settings.WebhookURL,
         Placeholder = "https://discord.com/api/webhooks/...",
         Finished = true,
     })
 
-    serverSection:AddButton("Server hop", function()
-        self:ServerHop()
-    end)
+    local serverHopButton = serverSection:AddButton({
+        Text = "Server hop",
+        LocaleKey = "manager.interface.server_hop",
+        Func = function()
+            self:ServerHop()
+        end,
+    })
 
     self.Library.Toggles.InterfaceManager_AutoMinimize:OnChanged(function()
         self.Settings.AutoMinimize = self.Library.Toggles.InterfaceManager_AutoMinimize.Value
