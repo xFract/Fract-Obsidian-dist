@@ -105,6 +105,7 @@ end
 local SERVER_HOP_MAX_PAGES = 5
 local LOW_PLAYER_RATIO = 0.3
 local MAX_ANTI_STUCK_SECONDS = 3600
+local PERFORMANCE_FPS_CAP = 30
 
 local PERFORMANCE_EFFECT_CLASSES = {
     Beam = true,
@@ -354,6 +355,44 @@ function InterfaceManager:TrackRuntimeConnection(connection)
     return connection
 end
 
+function InterfaceManager:EnforcePerformanceFPSCap(performanceGeneration)
+    if
+        not self.Settings.PerformanceMode
+        or self.PerformanceGeneration ~= performanceGeneration
+        or type(setfpscap) ~= "function"
+    then
+        return
+    end
+
+    pcall(setfpscap, PERFORMANCE_FPS_CAP)
+end
+
+function InterfaceManager:RefreshPerformanceFPSCap(performanceGeneration)
+    self:EnforcePerformanceFPSCap(performanceGeneration)
+
+    task.defer(function()
+        self:EnforcePerformanceFPSCap(performanceGeneration)
+    end)
+
+    task.delay(0.2, function()
+        self:EnforcePerformanceFPSCap(performanceGeneration)
+    end)
+end
+
+function InterfaceManager:TrackPerformanceWindowSignals(performanceGeneration)
+    local mainFrame = self.Window and self.Window.MainFrame
+    if not mainFrame or not mainFrame:IsA("GuiObject") then
+        return
+    end
+
+    local function refreshFPSCap()
+        self:RefreshPerformanceFPSCap(performanceGeneration)
+    end
+
+    self:TrackPerformanceConnection(mainFrame:GetPropertyChangedSignal("Visible"):Connect(refreshFPSCap))
+    self:TrackPerformanceConnection(mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshFPSCap))
+end
+
 function InterfaceManager:CleanupRuntime()
     if self.AFKThread then
         task.cancel(self.AFKThread)
@@ -414,7 +453,8 @@ function InterfaceManager:ApplyUltraPerformanceMode()
             end
         end
 
-        pcall(setfpscap, 30)
+        pcall(setfpscap, PERFORMANCE_FPS_CAP)
+        self:TrackPerformanceWindowSignals(performanceGeneration)
     end
 
     task.spawn(function()
