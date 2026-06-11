@@ -105,6 +105,7 @@ end
 local SERVER_HOP_MAX_PAGES = 5
 local LOW_PLAYER_RATIO = 0.3
 local MAX_ANTI_STUCK_SECONDS = 3600
+local ANTI_STUCK_STARTUP_GRACE_SECONDS = 30
 local PERFORMANCE_FPS_CAP = 30
 
 local PERFORMANCE_EFFECT_CLASSES = {
@@ -559,13 +560,14 @@ function InterfaceManager:UpdateAntiStuckStatus(remainingSeconds)
         or string.format("Anti stuck hop: %s remaining", time))
 end
 
-function InterfaceManager:ResetAntiStuckTimer()
+function InterfaceManager:ResetAntiStuckTimer(minimumDelaySeconds)
     self.Settings.AntiStuckHopSeconds = self:GetAntiStuckSeconds()
-    self.AntiStuckDeadline = os.clock() + self.Settings.AntiStuckHopSeconds
-    self:UpdateAntiStuckStatus(self.Settings.AntiStuckHopSeconds)
+    local delay = math.max(self.Settings.AntiStuckHopSeconds, tonumber(minimumDelaySeconds) or 0)
+    self.AntiStuckDeadline = os.clock() + delay
+    self:UpdateAntiStuckStatus(delay)
 end
 
-function InterfaceManager:SetAntiStuckHop(enabled)
+function InterfaceManager:SetAntiStuckHop(enabled, minimumDelaySeconds)
     self.Settings.AntiStuckHop = enabled == true
 
     if self.AntiStuckThread then
@@ -579,7 +581,7 @@ function InterfaceManager:SetAntiStuckHop(enabled)
         return
     end
 
-    self:ResetAntiStuckTimer()
+    self:ResetAntiStuckTimer(minimumDelaySeconds)
 
     self.AntiStuckThread = task.spawn(function()
         while self.Settings.AntiStuckHop do
@@ -993,7 +995,7 @@ function InterfaceManager:ApplyLoadedSettings()
     end
 
     if self.Settings.AntiStuckHop then
-        self:SetAntiStuckHop(true)
+        self:SetAntiStuckHop(true, ANTI_STUCK_STARTUP_GRACE_SECONDS)
     end
 
     if self.Settings.PerformanceMode then
